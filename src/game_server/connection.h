@@ -2,6 +2,7 @@
 
 #include "../player.h"
 #include "../xtea.h"
+#include "outgoing_buffer.h"
 #include "reader.h"
 #include "writer.h"
 
@@ -9,6 +10,7 @@
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
 #include <memory>
+#include <span>
 #include <zlib.h>
 
 namespace asio = boost::asio;
@@ -24,7 +26,7 @@ public:
 	~Connection();
 
 	void run();
-	void write(std::shared_ptr<OutgoingMessage> msg);
+	void enqueue(std::shared_ptr<OutgoingBuffer> buffer);
 	void close(std::string_view msg);
 	void close();
 	void close_and_shutdown();
@@ -47,7 +49,10 @@ private:
 	void on_flush(beast::error_code ec, size_t bytes_transferred);
 
 	void shutdown();
+
+	Player* get_player() const override { return player; }
 	uint32_t get_player_id() const override { return player ? player->getID() : 0; }
+	void enqueue(std::span<uint8_t> span) override;
 
 	void add_auto_flush();
 	void remove_auto_flush();
@@ -56,7 +61,9 @@ private:
 	beast::tcp_stream stream;
 
 	IncomingMessage msg;
-	std::list<OutgoingMessage> msgs;
+
+	std::shared_ptr<OutgoingBuffer> current_buffer;
+	std::list<OutgoingBuffer> buffers;
 
 	struct Challenge
 	{

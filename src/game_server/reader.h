@@ -1,7 +1,7 @@
 #pragma once
 
-#include "incoming_message.h"
 #include "connection.h"
+#include "incoming_message.h"
 
 #include <memory>
 
@@ -40,7 +40,7 @@ private:
 	void read_market_browse(IncomingMessage& msg);
 	void read_market_cancel_offer(IncomingMessage& msg);
 	void read_market_create_offer(IncomingMessage& msg);
-	void read_market_leave();
+	void read_market_leave(IncomingMessage& msg);
 	void read_modal_window_answer(IncomingMessage& msg);
 	void read_open_channel(IncomingMessage& msg);
 	void read_open_private_channel(IncomingMessage& msg);

@@ -7,14 +7,9 @@ extern Game g_game;
 
 namespace tfs::game_server {
 
-void Reader::read_subsequent(IncomingMessage& msg) {
-
-}
-
-
 void Reader::read_add_vip(IncomingMessage& msg)
 {
-	const auto name = msg.get_string();
+	const auto name = msg.get<std::string>();
 
 	g_dispatcher.addTask([id = get_player_id(), name = std::string{name}]() { g_game.playerRequestAddVip(id, name); });
 }
@@ -22,17 +17,17 @@ void Reader::read_add_vip(IncomingMessage& msg)
 void Reader::read_auto_walk(IncomingMessage& msg)
 {
 	const auto directions = msg.get<uint8_t>();
-	if (directions == 0 || (msg.getBufferPosition() + directions) != (msg.getLength() + 8)) {
+	if (directions == 0 || (msg.position() + directions) != (msg.len() + 8)) {
 		return;
 	}
 
-	msg.skipBytes(directions);
+	msg.advance(directions);
 
 	std::vector<Direction> path;
 	path.reserve(directions);
 
 	for (uint8_t i = 0; i < directions; ++i) {
-		const auto raw = msg.getPreviousByte();
+		const auto raw = msg.get_prev<uint8_t>();
 		switch (raw) {
 			case 1:
 				path.push_back(DIRECTION_EAST);
@@ -80,14 +75,14 @@ void Reader::read_attack(IncomingMessage& msg)
 
 void Reader::read_browse_field(IncomingMessage& msg)
 {
-	const auto position = msg.getPosition();
+	const auto position = msg.get<Position>();
 
 	g_dispatcher.addTask([=, id = get_player_id()]() { g_game.playerBrowseField(id, position); });
 }
 
 void Reader::read_channel_exclude(IncomingMessage& msg)
 {
-	const auto name = msg.get_string();
+	const auto name = msg.get<std::string>();
 
 	g_dispatcher.addTask(
 	    [=, id = get_player_id(), name = std::string{name}]() { g_game.playerChannelExclude(id, name); });
@@ -95,7 +90,7 @@ void Reader::read_channel_exclude(IncomingMessage& msg)
 
 void Reader::read_channel_invite(IncomingMessage& msg)
 {
-	const auto name = msg.get_string();
+	const auto name = msg.get<std::string>();
 
 	g_dispatcher.addTask([id = get_player_id(), name = std::string{name}]() { g_game.playerChannelInvite(id, name); });
 }
@@ -116,10 +111,10 @@ void Reader::read_close_container(IncomingMessage& msg)
 
 void Reader::read_debug_assert(IncomingMessage& msg)
 {
-	const auto assert_line = msg.get_string();
-	const auto date = msg.get_string();
-	const auto description = msg.get_string();
-	const auto comment = msg.get_string();
+	const auto assert_line = msg.get<std::string>();
+	const auto date = msg.get<std::string>();
+	const auto description = msg.get<std::string>();
+	const auto comment = msg.get<std::string>();
 
 	g_dispatcher.addTask([id = get_player_id(), assert_line = std::string{assert_line}, date = std::string{date},
 	                      description = std::string{description}, comment = std::string{comment}]() {
@@ -129,7 +124,7 @@ void Reader::read_debug_assert(IncomingMessage& msg)
 
 void Reader::read_edit_podium_request(IncomingMessage& msg)
 {
-	const auto position = msg.getPosition();
+	const auto position = msg.get<Position>();
 	const auto sprite_id = msg.get<uint16_t>();
 	const auto stack_pos = msg.get<uint8_t>();
 
@@ -141,7 +136,7 @@ void Reader::read_edit_podium_request(IncomingMessage& msg)
 void Reader::read_edit_vip(IncomingMessage& msg)
 {
 	const auto guid = msg.get<uint32_t>();
-	const auto description = msg.get_string();
+	const auto description = msg.get<std::string>();
 	const auto icon = std::min<uint32_t>(10, msg.get<uint32_t>()); // 10 is max icon in 9.63
 	const auto notify = msg.get<uint8_t>() != 0;
 
@@ -200,7 +195,7 @@ void Reader::read_house_window(IncomingMessage& msg)
 {
 	const auto door_id = msg.get<uint8_t>();
 	const auto window_id = msg.get<uint32_t>();
-	const auto text = msg.get_string();
+	const auto text = msg.get<std::string>();
 
 	g_dispatcher.addTask([=, id = get_player_id(), text = std::string{text}]() {
 		g_game.playerUpdateHouseWindow(id, door_id, window_id, text);
@@ -223,8 +218,8 @@ void Reader::read_join_party(IncomingMessage& msg)
 
 void Reader::read_look_at(IncomingMessage& msg)
 {
-	const auto position = msg.getPosition();
-	msg.skipBytes(2); // sprite_id
+	const auto position = msg.get<Position>();
+	msg.advance(2); // sprite_id
 	const auto stack_pos = msg.get<uint8_t>();
 
 	g_dispatcher.addTask(DISPATCHER_TASK_EXPIRATION,
@@ -308,7 +303,7 @@ void Reader::read_market_create_offer(IncomingMessage& msg)
 	    [=, id = get_player_id()]() { g_game.playerCreateMarketOffer(id, type, sprite_id, amount, price, anonymous); });
 }
 
-void Reader::read_market_leave()
+void Reader::read_market_leave(IncomingMessage& msg)
 {
 	g_dispatcher.addTask([id = get_player_id()]() { g_game.playerLeaveMarket(id); });
 }
@@ -331,7 +326,7 @@ void Reader::read_open_channel(IncomingMessage& msg)
 
 void Reader::read_open_private_channel(IncomingMessage& msg)
 {
-	const auto receiver = msg.get_string();
+	const auto receiver = msg.get<std::string>();
 	g_dispatcher.addTask(
 	    [id = get_player_id(), receiver = std::string{receiver}]() { g_game.playerOpenPrivateChannel(id, receiver); });
 }
@@ -377,7 +372,7 @@ void Reader::read_remove_vip(IncomingMessage& msg)
 
 void Reader::read_request_trade(IncomingMessage& msg)
 {
-	const auto position = msg.getPosition();
+	const auto position = msg.get<Position>();
 	const auto sprite_id = msg.get<uint16_t>();
 	const auto stack_pos = msg.get<uint8_t>();
 	const auto target_id = msg.get<uint32_t>();
@@ -404,7 +399,7 @@ void Reader::read_revoke_party_invite(IncomingMessage& msg)
 
 void Reader::read_rotate_item(IncomingMessage& msg)
 {
-	const auto position = msg.getPosition();
+	const auto position = msg.get<Position>();
 	const auto sprite_id = msg.get<uint16_t>();
 	const auto stack_pos = msg.get<uint8_t>();
 
@@ -416,14 +411,14 @@ void Reader::read_rule_violation_report(IncomingMessage& msg)
 {
 	const auto type = msg.get<uint8_t>();
 	const auto reason = msg.get<uint8_t>();
-	const auto target_name = msg.get_string();
-	const auto comment = msg.get_string();
+	const auto target_name = msg.get<std::string>();
+	const auto comment = msg.get<std::string>();
 
 	std::string translation;
 	if (type == REPORT_TYPE_NAME) {
-		translation = msg.get_string();
+		translation = msg.get<std::string>();
 	} else if (type == REPORT_TYPE_STATEMENT) {
-		translation = msg.get_string();
+		translation = msg.get<std::string>();
 		msg.get<uint32_t>(); // statement id, used to get whatever player have said, we don't log that.
 	}
 
@@ -442,7 +437,7 @@ void Reader::read_say(IncomingMessage& msg)
 	switch (type) {
 		case TALKTYPE_PRIVATE_TO:
 		case TALKTYPE_PRIVATE_RED_TO:
-			receiver = msg.get_string();
+			receiver = msg.get<std::string>();
 			break;
 
 		case TALKTYPE_CHANNEL_Y:
@@ -454,7 +449,7 @@ void Reader::read_say(IncomingMessage& msg)
 			break;
 	}
 
-	const auto text = msg.get_string();
+	const auto text = msg.get<std::string>();
 	if (text.length() > 255) {
 		return;
 	}
@@ -492,7 +487,7 @@ void Reader::read_set_outfit(IncomingMessage& msg)
 			outfit.lookMountLegs = msg.get<uint8_t>();
 			outfit.lookMountFeet = msg.get<uint8_t>();
 		} else {
-			msg.skipBytes(4);
+			msg.advance(4);
 
 			if (const auto player = g_game.getPlayerByID(get_player_id())) {
 				const Outfit_t& currentOutfit = player->getCurrentOutfit();
@@ -514,7 +509,7 @@ void Reader::read_set_outfit(IncomingMessage& msg)
 		outfit.lookMountLegs = msg.get<uint8_t>();
 		outfit.lookMountFeet = msg.get<uint8_t>();
 	} else if (type == 2) {
-		const auto pos = msg.getPosition();
+		const auto pos = msg.get<Position>();
 		const auto sprite_id = msg.get<uint16_t>();
 		const auto stack_pos = msg.get<uint8_t>();
 
@@ -535,17 +530,17 @@ void Reader::read_set_outfit(IncomingMessage& msg)
 void Reader::read_text_window(IncomingMessage& msg)
 {
 	const auto window_id = msg.get<uint32_t>();
-	const auto text = msg.get_string();
+	const auto text = msg.get<std::string>();
 
 	g_dispatcher.addTask([id = get_player_id(), window_id, text]() { g_game.playerWriteItem(id, window_id, text); });
 }
 
 void Reader::read_throw(IncomingMessage& msg)
 {
-	const auto from_position = msg.getPosition();
+	const auto from_position = msg.get<Position>();
 	const auto sprite_id = msg.get<uint16_t>();
 	const auto from_stack_pos = msg.get<uint8_t>();
-	const auto to_position = msg.getPosition();
+	const auto to_position = msg.get<Position>();
 	const auto count = msg.get<uint8_t>();
 
 	if (to_position != from_position) {
@@ -571,7 +566,7 @@ void Reader::read_update_container(IncomingMessage& msg)
 
 void Reader::read_use_item(IncomingMessage& msg)
 {
-	const auto position = msg.getPosition();
+	const auto position = msg.get<Position>();
 	const auto sprite_id = msg.get<uint16_t>();
 	const auto stack_pos = msg.get<uint8_t>();
 	const auto index = msg.get<uint8_t>();
@@ -583,10 +578,10 @@ void Reader::read_use_item(IncomingMessage& msg)
 
 void Reader::read_use_item_ex(IncomingMessage& msg)
 {
-	const auto from_position = msg.getPosition();
+	const auto from_position = msg.get<Position>();
 	const auto from_sprite_id = msg.get<uint16_t>();
 	const auto from_stack_pos = msg.get<uint8_t>();
-	const auto to_position = msg.getPosition();
+	const auto to_position = msg.get<Position>();
 	const auto to_sprite_id = msg.get<uint16_t>();
 	const auto to_stack_pos = msg.get<uint8_t>();
 
@@ -598,7 +593,7 @@ void Reader::read_use_item_ex(IncomingMessage& msg)
 
 void Reader::read_use_with_creature(IncomingMessage& msg)
 {
-	const auto from_position = msg.getPosition();
+	const auto from_position = msg.get<Position>();
 	const auto sprite_id = msg.get<uint16_t>();
 	const auto from_stack_pos = msg.get<uint8_t>();
 	const auto creature_id = msg.get<uint32_t>();
@@ -610,13 +605,12 @@ void Reader::read_use_with_creature(IncomingMessage& msg)
 
 void Reader::read_wrap_item(IncomingMessage& msg)
 {
-	const auto position = msg.getPosition();
+	const auto position = msg.get<Position>();
 	const auto sprite_id = msg.get<uint16_t>();
 	const auto stack_pos = msg.get<uint8_t>();
 
 	g_dispatcher.addTask(DISPATCHER_TASK_EXPIRATION,
 	                     [=, id = get_player_id()]() { g_game.playerWrapItem(id, position, stack_pos, sprite_id); });
 }
-
 
 } // namespace tfs::game_server

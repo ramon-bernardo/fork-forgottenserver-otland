@@ -191,6 +191,7 @@
     <ClCompile Include="..\src\game_server\game_server.cpp" />
     <ClCompile Include="..\src\game_server\listener.cpp" />
     <ClCompile Include="..\src\game_server\incoming_message.cpp" />
+    <ClCompile Include="..\src\game_server\outgoing_buffer.cpp" />
     <ClCompile Include="..\src\game_server\outgoing_message.cpp" />
     <ClCompile Include="..\src\game_server\reader.cpp" />
     <ClCompile Include="..\src\game_server\writer.cpp" />
@@ -222,7 +223,6 @@
     <ClCompile Include="..\src\monsters.cpp" />
     <ClCompile Include="..\src\mounts.cpp" />
     <ClCompile Include="..\src\movement.cpp" />
-    <ClCompile Include="..\src\networkmessage.cpp" />
     <ClCompile Include="..\src\npc.cpp" />
     <ClCompile Include="..\src\otpch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -233,7 +233,6 @@
     </ClCompile>
     <ClCompile Include="..\src\otserv.cpp" />
     <ClCompile Include="..\src\outfit.cpp" />
-    <ClCompile Include="..\src\outputmessage.cpp" />
     <ClCompile Include="..\src\party.cpp" />
     <ClCompile Include="..\src\player.cpp" />
     <ClCompile Include="..\src\podium.cpp" />
@@ -293,6 +292,7 @@
     <ClInclude Include="..\src\game_server\game_server.h" />
     <ClInclude Include="..\src\game_server\listener.h" />
     <ClInclude Include="..\src\game_server\incoming_message.h" />
+    <ClInclude Include="..\src\game_server\outgoing_buffer.h" />
     <ClInclude Include="..\src\game_server\outgoing_message.h" />
     <ClInclude Include="..\src\game_server\reader.h" />
     <ClInclude Include="..\src\game_server\writer.h" />
@@ -325,7 +325,6 @@
     <ClInclude Include="..\src\monsters.h" />
     <ClInclude Include="..\src\mounts.h" />
     <ClInclude Include="..\src\movement.h" />
-    <ClInclude Include="..\src\networkmessage.h" />
     <ClInclude Include="..\src\npc.h" />
     <ClInclude Include="..\src\otpch.h" />
     <ClInclude Include="..\src\outfit.h" />

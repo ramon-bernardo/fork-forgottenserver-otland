@@ -1,6 +1,7 @@
 #include "connection.h"
 
 #include "../game.h"
+#include "../lockfree.h"
 #include "../rsa.h"
 #include "../scheduler.h"
 #include "../tasks.h"
@@ -115,7 +116,7 @@ void Connection::on_read_server_name(beast::error_code ec, size_t bytes_transfer
 	msg.set_header_len(bytes_transferred);
 
 	// Extract the server name string from the received data.
-	const auto server_name = msg.get_string();
+	const auto server_name = msg.get<std::string>();
 	if (server_name.empty()) {
 		// Server name is missing or invalid, abort the handshake.
 		return;
@@ -241,13 +242,13 @@ void Connection::on_read_login_body(beast::error_code ec, size_t bytes_transferr
 	const auto os = static_cast<OperatingSystem_t>(msg.get<uint16_t>());
 	const auto version = msg.get<uint16_t>();
 
-	msg.skipBytes(4);
+	msg.advance(4);
 
 	if (msg.getRemainingBufferLength() > 132) {
 		msg.getString();
 	}
 
-	msg.skipBytes(3); // U16 dat revision, U8 preview state
+	msg.advance(3); // U16 dat revision, U8 preview state
 
 	// Disconnect if RSA decrypt fails
 	if (!RSA_decrypt(msg)) {
@@ -580,7 +581,7 @@ void Connection::on_read_subsequent_body(beast::error_code ec, size_t bytes_tran
 
 void Connection::read_subsequent(uint8_t id) {}
 
-void Connection::write(std::shared_ptr<OutgoingMessage> msg)
+void Connection::enqueue(std::shared_ptr<OutgoingBuffer> buffer)
 {
 	std::lock_guard<std::recursive_mutex> lock(mtx);
 
@@ -588,9 +589,9 @@ void Connection::write(std::shared_ptr<OutgoingMessage> msg)
 		return;
 	}
 
-	msgs.emplace_back(std::move(msg));
+	buffers.emplace_back(std::move(buffer));
 
-	const auto pending_flush = msgs.size() == 1;
+	const auto pending_flush = buffers.size() == 1;
 	if (pending_flush) {
 		asio::post(stream.get_executor(), [self = shared_from_this()] { self->flush(); });
 	}
@@ -600,13 +601,13 @@ void Connection::flush()
 {
 	std::lock_guard<std::recursive_mutex> lock(mtx);
 
-	assert(!msgs.empty());
+	assert(!buffers.empty());
 
-	auto msg = msgs.front().shared_from_this();
+	auto buffer = buffers.front();
 
 	stream.expires_after(30s);
 
-	asio::async_write(stream, asio::buffer(msg->getOutputBuffer(), msg->getLength()),
+	asio::async_write(stream, asio::buffer(buffer->getOutputBuffer(), buffer->len()),
 	                  [self = shared_from_this()](beast::error_code ec, size_t bytes_transferred) {
 		                  self->on_flush(ec, bytes_transferred);
 	                  });
@@ -624,9 +625,9 @@ void Connection::on_flush(beast::error_code ec, size_t bytes_transferred)
 
 	stream.expires_never();
 
-	msgs.pop_front();
+	buffers.pop_front();
 
-	const auto pending_flush = !msgs.empty();
+	const auto pending_flush = !buffers.empty();
 	if (pending_flush) {
 		flush();
 	} else if (disconnected) {
@@ -643,6 +644,20 @@ void Connection::shutdown()
 		stream.socket().shutdown(asio::ip::tcp::socket::shutdown_both, ec);
 		stream.socket().close(ec);
 	}
+}
+
+void Connection::enqueue(std::span<uint8_t> span)
+{
+	const auto n = span.size();
+
+	if (!current_buffer) {
+		current_buffer = make_outgoing_buffer();
+	} else if ((current_buffer->len() + n) > 24 * 1024) {
+		enqueue(current_buffer);
+		current_buffer = make_outgoing_buffer();
+	}
+
+	current_buffer->append(span);
 }
 
 void Connection::add_auto_flush()
@@ -665,11 +680,7 @@ void Connection::remove_auto_flush()
 
 void Connection::close(std::string_view msg)
 {
-	auto output = tfs::net::make_output_message();
-	output->addByte(0x14);
-	output->addString(msg);
-	write(output);
-
+	write_login_error(msg);
 	close();
 }
 
