@@ -9,6 +9,7 @@
 #include "databasemanager.h"
 #include "databasetasks.h"
 #include "game.h"
+#include "game_server/game_server.h"
 #include "http/http.h"
 #include "iomarket.h"
 #include "monsters.h"
@@ -18,6 +19,7 @@
 #include "script.h"
 #include "scriptmanager.h"
 #include "server.h"
+#include "status_server/status_server.h"
 
 #include <fstream>
 
@@ -46,7 +48,7 @@ void startupErrorMessage(const std::string& errorStr)
 	g_loaderSignal.notify_all();
 }
 
-void mainLoader(ServiceManager* services)
+void mainLoader()
 {
 	// dispatcher thread
 	g_game.setGameState(GAME_STATE_STARTUP);
@@ -211,15 +213,6 @@ void mainLoader(ServiceManager* services)
 	std::cout << ">> Initializing gamestate" << std::endl;
 	g_game.setGameState(GAME_STATE_INIT);
 
-	// Game client protocols
-	services->add<ProtocolGame>(static_cast<uint16_t>(getNumber(ConfigManager::GAME_PORT)));
-
-#ifdef HTTP
-	// HTTP server
-	tfs::http::start(getBoolean(ConfigManager::BIND_ONLY_GLOBAL_ADDRESS), getString(ConfigManager::IP),
-	                 getNumber(ConfigManager::HTTP_PORT), getNumber(ConfigManager::HTTP_WORKERS));
-#endif
-
 	RentPeriod_t rentPeriod;
 	std::string strRentPeriod = boost::algorithm::to_lower_copy(getString(ConfigManager::HOUSE_RENT_PERIOD));
 
@@ -249,7 +242,7 @@ void mainLoader(ServiceManager* services)
 	}
 #endif
 
-	g_game.start(services);
+	g_game.start();
 	g_game.setGameState(GAME_STATE_NORMAL);
 	g_loaderSignal.notify_all();
 }
@@ -269,24 +262,26 @@ void startServer()
 	// Setup bad allocation handler
 	std::set_new_handler(badAllocationHandler);
 
-	ServiceManager serviceManager;
-
 	g_dispatcher.start();
 	g_scheduler.start();
 
-	g_dispatcher.addTask([services = &serviceManager]() { mainLoader(services); });
+	g_dispatcher.addTask([]() { mainLoader(); });
 
 	g_loaderSignal.wait(g_loaderUniqueLock);
 
-	if (serviceManager.is_running()) {
-		std::cout << ">> " << getString(ConfigManager::SERVER_NAME) << " Server Online!" << std::endl << std::endl;
-		serviceManager.run();
-	} else {
-		std::cout << ">> No services running. The server is NOT online." << std::endl;
-		g_scheduler.shutdown();
-		g_databaseTasks.shutdown();
-		g_dispatcher.shutdown();
-	}
+#ifdef HTTP
+	// HTTP server
+	tfs::http::start(getBoolean(ConfigManager::BIND_ONLY_GLOBAL_ADDRESS), getString(ConfigManager::IP),
+	                 getNumber(ConfigManager::HTTP_PORT), getNumber(ConfigManager::HTTP_WORKERS));
+#endif
+
+	// STATUS server
+	tfs::status_server::start(getBoolean(ConfigManager::BIND_ONLY_GLOBAL_ADDRESS), getString(ConfigManager::IP),
+	                          getNumber(ConfigManager::STATUS_PORT));
+
+	// GAME server
+	tfs::game_server::start(getBoolean(ConfigManager::BIND_ONLY_GLOBAL_ADDRESS), getString(ConfigManager::IP),
+	                          getNumber(ConfigManager::GAME_PORT));
 
 	g_scheduler.join();
 	g_databaseTasks.join();

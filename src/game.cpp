@@ -16,6 +16,8 @@
 #include "globalevent.h"
 #include "housetile.h"
 #include "http/http.h"
+#include "status_server/status_server.h"
+#include "game_server/game_server.h"
 #include "inbox.h"
 #include "iologindata.h"
 #include "iomarket.h"
@@ -61,10 +63,8 @@ Game::Game()
 	offlineTrainingWindow.priority = true;
 }
 
-void Game::start(ServiceManager* manager)
+void Game::start()
 {
-	serviceManager = manager;
-
 	g_scheduler.addEvent(createSchedulerTask(EVENT_CREATURE_THINK_INTERVAL, [this]() { checkCreatures(0); }));
 	g_scheduler.addEvent(
 	    createSchedulerTask(getNumber(ConfigManager::PATHFINDING_INTERVAL), [this]() { updateCreaturesPath(0); }));
@@ -122,6 +122,7 @@ void Game::setGameState(GameState_t newState)
 #ifdef HTTP
 			tfs::http::stop();
 #endif
+			tfs::status_server::stop();
 			break;
 		}
 
@@ -4830,11 +4831,7 @@ void Game::shutdown()
 
 	cleanup();
 
-	if (serviceManager) {
-		serviceManager->stop();
-	}
-
-	ConnectionManager::getInstance().closeAll();
+	tfs::game_server::stop();
 
 	std::cout << " done!" << std::endl;
 }

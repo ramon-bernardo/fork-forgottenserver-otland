@@ -211,6 +211,8 @@ bool ConfigManager::load()
 		integer[HTTP_PORT] = getGlobalNumber(L, "httpPort", 8080);
 		integer[HTTP_WORKERS] = getGlobalNumber(L, "httpWorkers", 1);
 
+		integer[STATUS_PORT] = getGlobalNumber(L, "statusPort", 7171);
+
 		integer[MARKET_OFFER_DURATION] = getGlobalNumber(L, "marketOfferDuration", 30 * 24 * 60 * 60);
 	}
 

@@ -76,7 +76,7 @@ public:
 	Game(const Game&) = delete;
 	Game& operator=(const Game&) = delete;
 
-	void start(ServiceManager* manager);
+	void start();
 
 	void forceAddCondition(uint32_t creatureId, Condition* condition);
 	void forceRemoveCondition(uint32_t creatureId, ConditionType_t type);
@@ -533,8 +533,6 @@ private:
 
 	GameState_t gameState = GAME_STATE_NORMAL;
 	WorldType_t worldType = WORLD_TYPE_PVP;
-
-	ServiceManager* serviceManager = nullptr;
 
 	void updatePlayersRecord() const;
 	uint32_t playersRecord = 0;

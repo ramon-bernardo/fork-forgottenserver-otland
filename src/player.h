@@ -9,10 +9,10 @@
 #include "depotchest.h"
 #include "depotlocker.h"
 #include "enums.h"
+#include "game_server/connection.h"
 #include "groups.h"
 #include "guild.h"
 #include "inbox.h"
-#include "protocolgame.h"
 #include "town.h"
 #include "vocation.h"
 
@@ -89,10 +89,12 @@ static constexpr int32_t PLAYER_MIN_SPEED = 10;
 
 static constexpr int32_t NOTIFY_DEPOT_BOX_RANGE = 1;
 
+using tfs::game_server::Connection;
+
 class Player final : public Creature, public Cylinder
 {
 public:
-	explicit Player(ProtocolGame_ptr p);
+	explicit Player(std::shared_ptr<Connection> connection);
 	~Player();
 
 	using Creature::onWalk;
@@ -125,13 +127,6 @@ public:
 	bool hasMount(const Mount* mount) const;
 	bool hasMounts() const;
 	void dismount();
-
-	void sendFYIBox(const std::string& message)
-	{
-		if (client) {
-			client->sendFYIBox(message);
-		}
-	}
 
 	void setGUID(uint32_t guid) { this->guid = guid; }
 	uint32_t getGUID() const { return guid; }
@@ -204,11 +199,10 @@ public:
 
 	uint16_t getProtocolVersion() const
 	{
-		if (!client) {
-			return 0;
+		if (connection) {
+			return connection->getVersion();
 		}
-
-		return client->getVersion();
+		return 0;
 	}
 
 	bool hasSecureMode() const { return secureMode; }
@@ -239,11 +233,10 @@ public:
 	bool isOffline() const { return (getID() == 0); }
 	void disconnect()
 	{
-		if (client) {
-			client->disconnect();
+		if (connection) {
+			connection->close();
 		}
 	}
-	Connection::Address getIP() const;
 
 	void addContainer(uint8_t cid, Container* container);
 	void closeContainer(uint8_t cid);
@@ -520,12 +513,6 @@ public:
 	void removeAttacked(const Player* attacked);
 	void clearAttacked();
 	void addUnjustifiedDead(const Player* attacked);
-	void sendCreatureSkull(const Creature* creature) const
-	{
-		if (client) {
-			client->sendCreatureSkull(creature);
-		}
-	}
 	void checkSkullTicks(int64_t ticks);
 
 	bool canWear(uint32_t lookType, uint8_t addons) const;
@@ -537,242 +524,6 @@ public:
 
 	size_t getMaxVIPEntries() const;
 	size_t getMaxDepotItems() const;
-
-	// tile
-	// send methods
-	void sendAddTileItem(const Tile* tile, const Position& pos, const Item* item)
-	{
-		if (client) {
-			int32_t stackpos = tile->getStackposOfItem(this, item);
-			if (stackpos != -1) {
-				client->sendAddTileItem(pos, stackpos, item);
-			}
-		}
-	}
-	void sendUpdateTileItem(const Tile* tile, const Position& pos, const Item* item)
-	{
-		if (client) {
-			int32_t stackpos = tile->getStackposOfItem(this, item);
-			if (stackpos != -1) {
-				client->sendUpdateTileItem(pos, stackpos, item);
-			}
-		}
-	}
-	void sendRemoveTileThing(const Position& pos, int32_t stackpos)
-	{
-		if (stackpos != -1 && client) {
-			client->sendRemoveTileThing(pos, stackpos);
-		}
-	}
-	void sendUpdateTileCreature(const Creature* creature)
-	{
-		if (client) {
-			client->sendUpdateTileCreature(creature->getPosition(),
-			                               creature->getTile()->getClientIndexOfCreature(this, creature), creature);
-		}
-	}
-	void sendRemoveTileCreature(const Creature* creature, const Position& pos, int32_t stackpos)
-	{
-		if (client) {
-			client->sendRemoveTileCreature(creature, pos, stackpos);
-		}
-	}
-	void sendUpdateTile(const Tile* tile, const Position& pos)
-	{
-		if (client) {
-			client->sendUpdateTile(tile, pos);
-		}
-	}
-	void sendUpdateCreatureIcons(const Creature* creature)
-	{
-		if (client) {
-			client->sendUpdateCreatureIcons(creature);
-		}
-	}
-
-	void sendChannelMessage(const std::string& author, const std::string& text, SpeakClasses type, uint16_t channel)
-	{
-		if (client) {
-			client->sendChannelMessage(author, text, type, channel);
-		}
-	}
-	void sendChannelEvent(uint16_t channelId, const std::string& playerName, ChannelEvent_t channelEvent)
-	{
-		if (client) {
-			client->sendChannelEvent(channelId, playerName, channelEvent);
-		}
-	}
-	void sendCreatureAppear(const Creature* creature, const Position& pos,
-	                        MagicEffectClasses magicEffect = CONST_ME_NONE)
-	{
-		if (client) {
-			client->sendAddCreature(creature, pos, creature->getTile()->getClientIndexOfCreature(this, creature),
-			                        magicEffect);
-		}
-	}
-	void sendCreatureMove(const Creature* creature, const Position& newPos, int32_t newStackPos, const Position& oldPos,
-	                      int32_t oldStackPos, bool teleport)
-	{
-		if (client) {
-			client->sendMoveCreature(creature, newPos, newStackPos, oldPos, oldStackPos, teleport);
-		}
-	}
-	void sendCreatureTurn(const Creature* creature)
-	{
-		if (client && canSeeCreature(creature)) {
-			int32_t stackpos = creature->getTile()->getClientIndexOfCreature(this, creature);
-			if (stackpos != -1) {
-				client->sendCreatureTurn(creature, stackpos);
-			}
-		}
-	}
-	void sendCreatureSay(const Creature* creature, SpeakClasses type, const std::string& text,
-	                     const Position* pos = nullptr)
-	{
-		if (client) {
-			client->sendCreatureSay(creature, type, text, pos);
-		}
-	}
-	void sendPrivateMessage(const Player* speaker, SpeakClasses type, const std::string& text)
-	{
-		if (client) {
-			client->sendPrivateMessage(speaker, type, text);
-		}
-	}
-	void sendCreatureSquare(const Creature* creature, SquareColor_t color)
-	{
-		if (client) {
-			client->sendCreatureSquare(creature, color);
-		}
-	}
-	void sendCreatureChangeOutfit(const Creature* creature, const Outfit_t& outfit)
-	{
-		if (client) {
-			client->sendCreatureOutfit(creature, outfit);
-		}
-	}
-	void sendCreatureChangeVisible(const Creature* creature, bool visible)
-	{
-		if (!client) {
-			return;
-		}
-
-		if (creature->getPlayer()) {
-			if (visible) {
-				client->sendCreatureOutfit(creature, creature->getCurrentOutfit());
-			} else {
-				static Outfit_t outfit;
-				client->sendCreatureOutfit(creature, outfit);
-			}
-		} else if (canSeeInvisibility()) {
-			client->sendCreatureOutfit(creature, creature->getCurrentOutfit());
-		} else {
-			int32_t stackpos = creature->getTile()->getClientIndexOfCreature(this, creature);
-			if (stackpos == -1) {
-				return;
-			}
-
-			if (visible) {
-				client->sendAddCreature(creature, creature->getPosition(), stackpos);
-			} else {
-				client->sendRemoveTileCreature(creature, creature->getPosition(), stackpos);
-			}
-		}
-	}
-	void sendCreatureLight(const Creature* creature)
-	{
-		if (client) {
-			client->sendCreatureLight(creature);
-		}
-	}
-	void sendCreatureWalkthrough(const Creature* creature, bool walkthrough)
-	{
-		if (client) {
-			client->sendCreatureWalkthrough(creature, walkthrough);
-		}
-	}
-	void sendCreatureShield(const Creature* creature)
-	{
-		if (client) {
-			client->sendCreatureShield(creature);
-		}
-	}
-	void sendSpellCooldown(uint8_t spellId, uint32_t time)
-	{
-		if (client) {
-			client->sendSpellCooldown(spellId, time);
-		}
-	}
-	void sendSpellGroupCooldown(SpellGroup_t groupId, uint32_t time)
-	{
-		if (client) {
-			client->sendSpellGroupCooldown(groupId, time);
-		}
-	}
-	void sendUseItemCooldown(uint32_t time)
-	{
-		if (client) {
-			client->sendUseItemCooldown(time);
-		}
-	}
-	void sendSupplyUsed(const uint16_t clientId) const
-	{
-		if (client) {
-			client->sendSupplyUsed(clientId);
-		}
-	}
-	void sendModalWindow(const ModalWindow& modalWindow);
-
-	// container
-	void sendAddContainerItem(const Container* container, const Item* item);
-	void sendUpdateContainerItem(const Container* container, uint16_t slot, const Item* newItem);
-	void sendRemoveContainerItem(const Container* container, uint16_t slot);
-	void sendContainer(uint8_t cid, const Container* container, uint16_t firstIndex)
-	{
-		if (client) {
-			client->sendContainer(cid, container, firstIndex);
-		}
-	}
-
-	// inventory
-	void sendInventoryItem(slots_t slot, const Item* item)
-	{
-		if (client) {
-			client->sendInventoryItem(slot, item);
-		}
-	}
-	void sendItems()
-	{
-		if (client) {
-			client->sendItems();
-		}
-	}
-	void openSavedContainers();
-	void sendQuiverUpdate(bool sendAll = false)
-	{
-		if (!sendAll) {
-			// update one slot
-			Thing* slotThing = getThing(CONST_SLOT_RIGHT);
-			if (slotThing) {
-				Item* slotItem = slotThing->getItem();
-				if (slotItem && slotItem->getWeaponType() == WEAPON_QUIVER) {
-					sendInventoryItem(CONST_SLOT_RIGHT, slotItem);
-				}
-			}
-		} else {
-			// update all slots
-			std::vector<slots_t> slots = {CONST_SLOT_RIGHT, CONST_SLOT_LEFT, CONST_SLOT_AMMO};
-			for (auto const& slot : slots) {
-				Thing* slotThing = getThing(slot);
-				if (slotThing) {
-					Item* slotItem = slotThing->getItem();
-					if (slotItem && slotItem->getWeaponType() == WEAPON_QUIVER) {
-						sendInventoryItem(slot, slotItem);
-					}
-				}
-			}
-		}
-	}
 
 	// event methods
 	void onUpdateTileItem(const Tile* tile, const Position& pos, const Item* oldItem, const ItemType& oldType,
@@ -802,285 +553,6 @@ public:
 	// inventory
 	void onUpdateInventoryItem(Item* oldItem, Item* newItem);
 	void onRemoveInventoryItem(Item* item);
-
-	void sendCancelMessage(const std::string& msg) const
-	{
-		if (client) {
-			client->sendTextMessage(TextMessage(MESSAGE_STATUS_SMALL, msg));
-		}
-	}
-	void sendCancelMessage(ReturnValue message) const;
-	void sendCancelTarget() const
-	{
-		if (client) {
-			client->sendCancelTarget();
-		}
-	}
-	void sendCancelWalk() const
-	{
-		if (client) {
-			client->sendCancelWalk();
-		}
-	}
-	void sendChangeSpeed(const Creature* creature, uint32_t newSpeed) const
-	{
-		if (client) {
-			client->sendChangeSpeed(creature, newSpeed);
-		}
-	}
-	void sendCreatureHealth(const Creature* creature) const
-	{
-		if (client) {
-			client->sendCreatureHealth(creature);
-		}
-	}
-	void sendDistanceShoot(const Position& from, const Position& to, unsigned char type) const
-	{
-		if (client) {
-			client->sendDistanceShoot(from, to, type);
-		}
-	}
-	void sendHouseWindow(House* house, uint32_t listId) const;
-	void sendCreatePrivateChannel(uint16_t channelId, const std::string& channelName)
-	{
-		if (client) {
-			client->sendCreatePrivateChannel(channelId, channelName);
-		}
-	}
-	void sendClosePrivate(uint16_t channelId);
-	void sendIcons() const
-	{
-		if (client) {
-			client->sendIcons(getClientIcons());
-		}
-	}
-	void sendMagicEffect(const Position& pos, uint8_t type) const
-	{
-		if (client) {
-			client->sendMagicEffect(pos, type);
-		}
-	}
-	void sendPing();
-	void sendPingBack() const
-	{
-		if (client) {
-			client->sendPingBack();
-		}
-	}
-	void sendStats();
-
-	void sendExperienceTracker(int64_t rawExp, int64_t finalExp) const
-	{
-		if (client) {
-			client->sendExperienceTracker(rawExp, finalExp);
-		}
-	}
-
-	void sendBasicData() const
-	{
-		if (client) {
-			client->sendBasicData();
-		}
-	}
-	void sendSkills() const
-	{
-		if (client) {
-			client->sendSkills();
-		}
-	}
-	void sendTextMessage(MessageClasses mclass, const std::string& message) const
-	{
-		if (client) {
-			client->sendTextMessage(TextMessage(mclass, message));
-		}
-	}
-	void sendTextMessage(const TextMessage& message) const
-	{
-		if (client) {
-			client->sendTextMessage(message);
-		}
-	}
-	void sendReLoginWindow(uint8_t unfairFightReduction) const
-	{
-		if (client) {
-			client->sendReLoginWindow(unfairFightReduction);
-		}
-	}
-	void sendTextWindow(Item* item, uint16_t maxlen, bool canWrite) const
-	{
-		if (client) {
-			client->sendTextWindow(windowTextId, item, maxlen, canWrite);
-		}
-	}
-	void sendTextWindow(uint32_t itemId, const std::string& text) const
-	{
-		if (client) {
-			client->sendTextWindow(windowTextId, itemId, text);
-		}
-	}
-	void sendToChannel(const Creature* creature, SpeakClasses type, const std::string& text, uint16_t channelId) const
-	{
-		if (client) {
-			client->sendToChannel(creature, type, text, channelId);
-		}
-	}
-	void sendShop(Npc* npc) const
-	{
-		if (client) {
-			client->sendShop(npc, shopItemList);
-		}
-	}
-	void sendSaleItemList() const
-	{
-		if (client) {
-			client->sendSaleItemList(shopItemList);
-		}
-	}
-	void sendCloseShop() const
-	{
-		if (client) {
-			client->sendCloseShop();
-		}
-	}
-	void sendMarketEnter() const
-	{
-		if (client) {
-			client->sendMarketEnter();
-		}
-	}
-	void sendMarketLeave()
-	{
-		inMarket = false;
-		if (client) {
-			client->sendMarketLeave();
-		}
-	}
-	void sendMarketBrowseItem(uint16_t itemId, const MarketOfferList& buyOffers,
-	                          const MarketOfferList& sellOffers) const
-	{
-		if (client) {
-			client->sendMarketBrowseItem(itemId, buyOffers, sellOffers);
-		}
-	}
-	void sendMarketBrowseOwnOffers(const MarketOfferList& buyOffers, const MarketOfferList& sellOffers) const
-	{
-		if (client) {
-			client->sendMarketBrowseOwnOffers(buyOffers, sellOffers);
-		}
-	}
-	void sendMarketBrowseOwnHistory(const HistoryMarketOfferList& buyOffers,
-	                                const HistoryMarketOfferList& sellOffers) const
-	{
-		if (client) {
-			client->sendMarketBrowseOwnHistory(buyOffers, sellOffers);
-		}
-	}
-	void sendMarketAcceptOffer(const MarketOfferEx& offer) const
-	{
-		if (client) {
-			client->sendMarketAcceptOffer(offer);
-		}
-	}
-	void sendMarketCancelOffer(const MarketOfferEx& offer) const
-	{
-		if (client) {
-			client->sendMarketCancelOffer(offer);
-		}
-	}
-	void sendTradeItemRequest(const std::string& traderName, const Item* item, bool ack) const
-	{
-		if (client) {
-			client->sendTradeItemRequest(traderName, item, ack);
-		}
-	}
-	void sendTradeClose() const
-	{
-		if (client) {
-			client->sendCloseTrade();
-		}
-	}
-	void sendChannelsDialog()
-	{
-		if (client) {
-			client->sendChannelsDialog();
-		}
-	}
-	void sendOpenPrivateChannel(const std::string& receiver)
-	{
-		if (client) {
-			client->sendOpenPrivateChannel(receiver);
-		}
-	}
-	void sendOutfitWindow()
-	{
-		if (client) {
-			client->sendOutfitWindow();
-		}
-	}
-	void sendPodiumWindow(const Item* item)
-	{
-		if (client) {
-			client->sendPodiumWindow(item);
-		}
-	}
-	void sendCloseContainer(uint8_t cid)
-	{
-		if (client) {
-			client->sendCloseContainer(cid);
-		}
-	}
-
-	void sendChannel(uint16_t channelId, const std::string& channelName, const UsersMap* channelUsers,
-	                 const InvitedMap* invitedUsers)
-	{
-		if (client) {
-			client->sendChannel(channelId, channelName, channelUsers, invitedUsers);
-		}
-	}
-	void sendTutorial(uint8_t tutorialId)
-	{
-		if (client) {
-			client->sendTutorial(tutorialId);
-		}
-	}
-	void sendAddMarker(const Position& pos, uint8_t markType, const std::string& desc)
-	{
-		if (client) {
-			client->sendAddMarker(pos, markType, desc);
-		}
-	}
-	void sendEnterWorld()
-	{
-		if (client) {
-			client->sendEnterWorld();
-		}
-	}
-	void sendFightModes()
-	{
-		if (client) {
-			client->sendFightModes();
-		}
-	}
-	void sendNetworkMessage(const NetworkMessage& message)
-	{
-		if (client) {
-			client->writeToOutputBuffer(message);
-		}
-	}
-	void sendCombatAnalyzer(CombatType_t type, int32_t amount, DamageAnalyzerImpactType impactType,
-	                        const std::string& target)
-	{
-		if (client) {
-			client->sendCombatAnalyzer(type, amount, impactType, target);
-		}
-	}
-	void sendResourceBalance(const ResourceTypes_t resourceType, uint64_t amount)
-	{
-		if (client) {
-			client->sendResourceBalance(resourceType, amount);
-		}
-	}
-
 	void receivePing() { lastPong = OTSYS_TIME(); }
 
 	void onThink(uint32_t interval) override;
@@ -1121,6 +593,531 @@ public:
 
 	uint16_t getClientLowLevelBonusDisplay() const { return clientLowLevelBonusDisplay; }
 	void setClientLowLevelBonusDisplay(uint16_t value) { clientLowLevelBonusDisplay = value; }
+
+	// Connection
+	void sendFYIBox(const std::string& message)
+	{
+		if (connection) {
+			connection->writeFYIBox(message);
+		}
+	}
+	void sendCreatureSkull(const Creature* creature) const
+	{
+		if (connection) {
+			connection->writeCreatureSkull(creature);
+		}
+	}
+	void sendQuiverUpdate(bool sendAll = false)
+	{
+		if (!sendAll) {
+			// update one slot
+			Thing* slotThing = getThing(CONST_SLOT_RIGHT);
+			if (slotThing) {
+				Item* slotItem = slotThing->getItem();
+				if (slotItem && slotItem->getWeaponType() == WEAPON_QUIVER) {
+					sendInventoryItem(CONST_SLOT_RIGHT, slotItem);
+				}
+			}
+		} else {
+			// update all slots
+			std::vector<slots_t> slots = {CONST_SLOT_RIGHT, CONST_SLOT_LEFT, CONST_SLOT_AMMO};
+			for (auto const& slot : slots) {
+				Thing* slotThing = getThing(slot);
+				if (slotThing) {
+					Item* slotItem = slotThing->getItem();
+					if (slotItem && slotItem->getWeaponType() == WEAPON_QUIVER) {
+						sendInventoryItem(slot, slotItem);
+					}
+				}
+			}
+		}
+	}
+	void sendAddTileItem(const Tile* tile, const Position& pos, const Item* item)
+	{
+		if (connection) {
+			int32_t stackpos = tile->getStackposOfItem(this, item);
+			if (stackpos != -1) {
+				connection->writeAddTileItem(pos, stackpos, item);
+			}
+		}
+	}
+	void sendUpdateTileItem(const Tile* tile, const Position& pos, const Item* item)
+	{
+		if (connection) {
+			int32_t stackpos = tile->getStackposOfItem(this, item);
+			if (stackpos != -1) {
+				connection->writeUpdateTileItem(pos, stackpos, item);
+			}
+		}
+	}
+	void sendRemoveTileThing(const Position& pos, int32_t stackpos)
+	{
+		if (stackpos != -1 && client) {
+			connection->writeRemoveTileThing(pos, stackpos);
+		}
+	}
+	void sendUpdateTileCreature(const Creature* creature)
+	{
+		if (connection) {
+			connection->writeUpdateTileCreature(
+			    creature->getPosition(), creature->getTile()->getClientIndexOfCreature(this, creature), creature);
+		}
+	}
+	void sendRemoveTileCreature(const Creature* creature, const Position& pos, int32_t stackpos)
+	{
+		if (connection) {
+			connection->writeRemoveTileCreature(creature, pos, stackpos);
+		}
+	}
+	void sendUpdateTile(const Tile* tile, const Position& pos)
+	{
+		if (connection) {
+			connection->writeUpdateTile(tile, pos);
+		}
+	}
+	void sendUpdateCreatureIcons(const Creature* creature)
+	{
+		if (connection) {
+			connection->writeUpdateCreatureIcons(creature);
+		}
+	}
+
+	void sendChannelMessage(const std::string& author, const std::string& text, SpeakClasses type, uint16_t channel)
+	{
+		if (connection) {
+			connection->writeChannelMessage(author, text, type, channel);
+		}
+	}
+	void sendChannelEvent(uint16_t channelId, const std::string& playerName, ChannelEvent_t channelEvent)
+	{
+		if (connection) {
+			connection->writeChannelEvent(channelId, playerName, channelEvent);
+		}
+	}
+	void sendCreatureAppear(const Creature* creature, const Position& pos,
+	                        MagicEffectClasses magicEffect = CONST_ME_NONE)
+	{
+		if (connection) {
+			connection->writeAddCreature(creature, pos, creature->getTile()->getClientIndexOfCreature(this, creature),
+			                             magicEffect);
+		}
+	}
+	void sendCreatureMove(const Creature* creature, const Position& newPos, int32_t newStackPos, const Position& oldPos,
+	                      int32_t oldStackPos, bool teleport)
+	{
+		if (connection) {
+			connection->writeMoveCreature(creature, newPos, newStackPos, oldPos, oldStackPos, teleport);
+		}
+	}
+	void sendCreatureTurn(const Creature* creature)
+	{
+		if (client && canSeeCreature(creature)) {
+			int32_t stackpos = creature->getTile()->getClientIndexOfCreature(this, creature);
+			if (stackpos != -1) {
+				connection->writeCreatureTurn(creature, stackpos);
+			}
+		}
+	}
+	void sendCreatureSay(const Creature* creature, SpeakClasses type, const std::string& text,
+	                     const Position* pos = nullptr)
+	{
+		if (connection) {
+			connection->writeCreatureSay(creature, type, text, pos);
+		}
+	}
+	void sendPrivateMessage(const Player* speaker, SpeakClasses type, const std::string& text)
+	{
+		if (connection) {
+			connection->writePrivateMessage(speaker, type, text);
+		}
+	}
+	void sendCreatureSquare(const Creature* creature, SquareColor_t color)
+	{
+		if (connection) {
+			connection->writeCreatureSquare(creature, color);
+		}
+	}
+	void sendCreatureChangeOutfit(const Creature* creature, const Outfit_t& outfit)
+	{
+		if (connection) {
+			connection->writeCreatureOutfit(creature, outfit);
+		}
+	}
+	void sendCreatureChangeVisible(const Creature* creature, bool visible)
+	{
+		if (!client) {
+			return;
+		}
+
+		if (creature->getPlayer()) {
+			if (visible) {
+				connection->writeCreatureOutfit(creature, creature->getCurrentOutfit());
+			} else {
+				static Outfit_t outfit;
+				connection->writeCreatureOutfit(creature, outfit);
+			}
+		} else if (canSeeInvisibility()) {
+			connection->writeCreatureOutfit(creature, creature->getCurrentOutfit());
+		} else {
+			int32_t stackpos = creature->getTile()->getClientIndexOfCreature(this, creature);
+			if (stackpos == -1) {
+				return;
+			}
+
+			if (visible) {
+				connection->writeAddCreature(creature, creature->getPosition(), stackpos);
+			} else {
+				connection->writeRemoveTileCreature(creature, creature->getPosition(), stackpos);
+			}
+		}
+	}
+	void sendCreatureLight(const Creature* creature)
+	{
+		if (connection) {
+			connection->writeCreatureLight(creature);
+		}
+	}
+	void sendCreatureWalkthrough(const Creature* creature, bool walkthrough)
+	{
+		if (connection) {
+			connection->writeCreatureWalkthrough(creature, walkthrough);
+		}
+	}
+	void sendCreatureShield(const Creature* creature)
+	{
+		if (connection) {
+			connection->writeCreatureShield(creature);
+		}
+	}
+	void sendSpellCooldown(uint8_t spellId, uint32_t time)
+	{
+		if (connection) {
+			connection->writeSpellCooldown(spellId, time);
+		}
+	}
+	void sendSpellGroupCooldown(SpellGroup_t groupId, uint32_t time)
+	{
+		if (connection) {
+			connection->writeSpellGroupCooldown(groupId, time);
+		}
+	}
+	void sendUseItemCooldown(uint32_t time)
+	{
+		if (connection) {
+			connection->writeUseItemCooldown(time);
+		}
+	}
+	void sendSupplyUsed(const uint16_t clientId) const
+	{
+		if (connection) {
+			connection->writeSupplyUsed(clientId);
+		}
+	}
+	void sendModalWindow(const ModalWindow& modalWindow);
+
+	// container
+	void sendAddContainerItem(const Container* container, const Item* item);
+	void sendUpdateContainerItem(const Container* container, uint16_t slot, const Item* newItem);
+	void sendRemoveContainerItem(const Container* container, uint16_t slot);
+	void sendContainer(uint8_t cid, const Container* container, uint16_t firstIndex)
+	{
+		if (connection) {
+			connection->writeContainer(cid, container, firstIndex);
+		}
+	}
+
+	// inventory
+	void sendInventoryItem(slots_t slot, const Item* item)
+	{
+		if (connection) {
+			connection->writeInventoryItem(slot, item);
+		}
+	}
+	void sendItems()
+	{
+		if (connection) {
+			connection->writeItems();
+		}
+	}
+	void sendCancelMessage(const std::string& msg) const
+	{
+		if (connection) {
+			connection->writeTextMessage(TextMessage(MESSAGE_STATUS_SMALL, msg));
+		}
+	}
+	void sendCancelMessage(ReturnValue message) const;
+	void sendCancelTarget() const
+	{
+		if (connection) {
+			connection->writeCancelTarget();
+		}
+	}
+	void sendCancelWalk() const
+	{
+		if (connection) {
+			connection->writeCancelWalk();
+		}
+	}
+	void sendChangeSpeed(const Creature* creature, uint32_t newSpeed) const
+	{
+		if (connection) {
+			connection->writeChangeSpeed(creature, newSpeed);
+		}
+	}
+	void sendCreatureHealth(const Creature* creature) const
+	{
+		if (connection) {
+			connection->writeCreatureHealth(creature);
+		}
+	}
+	void sendDistanceShoot(const Position& from, const Position& to, unsigned char type) const
+	{
+		if (connection) {
+			connection->writeDistanceShoot(from, to, type);
+		}
+	}
+	void sendHouseWindow(House* house, uint32_t listId) const;
+	void sendCreatePrivateChannel(uint16_t channelId, const std::string& channelName)
+	{
+		if (connection) {
+			connection->writeCreatePrivateChannel(channelId, channelName);
+		}
+	}
+	void sendClosePrivate(uint16_t channelId);
+	void sendIcons() const
+	{
+		if (connection) {
+			connection->writeIcons(getClientIcons());
+		}
+	}
+	void sendMagicEffect(const Position& pos, uint8_t type) const
+	{
+		if (connection) {
+			connection->writeMagicEffect(pos, type);
+		}
+	}
+	void sendPing();
+	void sendPingBack() const
+	{
+		if (connection) {
+			connection->writePingBack();
+		}
+	}
+	void sendStats();
+
+	void sendExperienceTracker(int64_t rawExp, int64_t finalExp) const
+	{
+		if (connection) {
+			connection->writeExperienceTracker(rawExp, finalExp);
+		}
+	}
+
+	void sendBasicData() const
+	{
+		if (connection) {
+			connection->writeBasicData();
+		}
+	}
+	void sendSkills() const
+	{
+		if (connection) {
+			connection->writeSkills();
+		}
+	}
+	void sendTextMessage(MessageClasses mclass, const std::string& message) const
+	{
+		if (connection) {
+			connection->writeTextMessage(TextMessage(mclass, message));
+		}
+	}
+	void sendTextMessage(const TextMessage& message) const
+	{
+		if (connection) {
+			connection->writeTextMessage(message);
+		}
+	}
+	void sendReLoginWindow(uint8_t unfairFightReduction) const
+	{
+		if (connection) {
+			connection->writeReLoginWindow(unfairFightReduction);
+		}
+	}
+	void sendTextWindow(Item* item, uint16_t maxlen, bool canWrite) const
+	{
+		if (connection) {
+			connection->writeTextWindow(windowTextId, item, maxlen, canWrite);
+		}
+	}
+	void sendTextWindow(uint32_t itemId, const std::string& text) const
+	{
+		if (connection) {
+			connection->writeTextWindow(windowTextId, itemId, text);
+		}
+	}
+	void sendToChannel(const Creature* creature, SpeakClasses type, const std::string& text, uint16_t channelId) const
+	{
+		if (connection) {
+			connection->writeToChannel(creature, type, text, channelId);
+		}
+	}
+	void sendShop(Npc* npc) const
+	{
+		if (connection) {
+			connection->writeShop(npc, shopItemList);
+		}
+	}
+	void sendSaleItemList() const
+	{
+		if (connection) {
+			connection->writeSaleItemList(shopItemList);
+		}
+	}
+	void sendCloseShop() const
+	{
+		if (connection) {
+			connection->writeCloseShop();
+		}
+	}
+	void sendMarketEnter() const
+	{
+		if (connection) {
+			connection->writeMarketEnter();
+		}
+	}
+	void sendMarketLeave()
+	{
+		inMarket = false;
+		if (connection) {
+			connection->write_market_leave();
+		}
+	}
+	void sendMarketBrowseItem(uint16_t itemId, const MarketOfferList& buyOffers,
+	                          const MarketOfferList& sellOffers) const
+	{
+		if (connection) {
+			connection->writeMarketBrowseItem(itemId, buyOffers, sellOffers);
+		}
+	}
+	void sendMarketBrowseOwnOffers(const MarketOfferList& buyOffers, const MarketOfferList& sellOffers) const
+	{
+		if (connection) {
+			connection->writeMarketBrowseOwnOffers(buyOffers, sellOffers);
+		}
+	}
+	void sendMarketBrowseOwnHistory(const HistoryMarketOfferList& buyOffers,
+	                                const HistoryMarketOfferList& sellOffers) const
+	{
+		if (connection) {
+			connection->writeMarketBrowseOwnHistory(buyOffers, sellOffers);
+		}
+	}
+	void sendMarketAcceptOffer(const MarketOfferEx& offer) const
+	{
+		if (connection) {
+			connection->writeMarketAcceptOffer(offer);
+		}
+	}
+	void sendMarketCancelOffer(const MarketOfferEx& offer) const
+	{
+		if (connection) {
+			connection->writeMarketCancelOffer(offer);
+		}
+	}
+	void sendTradeItemRequest(const std::string& traderName, const Item* item, bool ack) const
+	{
+		if (connection) {
+			connection->writeTradeItemRequest(traderName, item, ack);
+		}
+	}
+	void sendTradeClose() const
+	{
+		if (connection) {
+			connection->writeCloseTrade();
+		}
+	}
+	void sendChannelsDialog()
+	{
+		if (connection) {
+			connection->writeChannelsDialog();
+		}
+	}
+	void sendOpenPrivateChannel(const std::string& receiver)
+	{
+		if (connection) {
+			connection->writeOpenPrivateChannel(receiver);
+		}
+	}
+	void sendOutfitWindow()
+	{
+		if (connection) {
+			connection->writeOutfitWindow();
+		}
+	}
+	void sendPodiumWindow(const Item* item)
+	{
+		if (connection) {
+			connection->writePodiumWindow(item);
+		}
+	}
+	void sendCloseContainer(uint8_t cid)
+	{
+		if (connection) {
+			connection->writeCloseContainer(cid);
+		}
+	}
+
+	void sendChannel(uint16_t channelId, const std::string& channelName, const UsersMap* channelUsers,
+	                 const InvitedMap* invitedUsers)
+	{
+		if (connection) {
+			connection->writeChannel(channelId, channelName, channelUsers, invitedUsers);
+		}
+	}
+	void sendTutorial(uint8_t tutorialId)
+	{
+		if (connection) {
+			connection->writeTutorial(tutorialId);
+		}
+	}
+	void sendAddMarker(const Position& pos, uint8_t markType, const std::string& desc)
+	{
+		if (connection) {
+			connection->writeAddMarker(pos, markType, desc);
+		}
+	}
+	void sendEnterWorld()
+	{
+		if (connection) {
+			connection->writeEnterWorld();
+		}
+	}
+	void sendFightModes()
+	{
+		if (connection) {
+			connection->writeFightModes();
+		}
+	}
+	void sendNetworkMessage(const NetworkMessage& message)
+	{
+		if (connection) {
+			connection->writeToOutputBuffer(message);
+		}
+	}
+	void sendCombatAnalyzer(CombatType_t type, int32_t amount, DamageAnalyzerImpactType impactType,
+	                        const std::string& target)
+	{
+		if (connection) {
+			connection->writeCombatAnalyzer(type, amount, impactType, target);
+		}
+	}
+	void sendResourceBalance(const ResourceTypes_t resourceType, uint64_t amount)
+	{
+		if (connection) {
+			connection->writeResourceBalance(resourceType, amount);
+		}
+	}
+
+	std::shared_ptr<Connection> getConnection() { return connection.lock(); }
 
 private:
 	std::forward_list<Condition*> getMuteConditions() const;
@@ -1211,8 +1208,7 @@ private:
 	int64_t lastPong;
 	int64_t nextAction = 0;
 
-	ProtocolGame_ptr client;
-	Connection::Address lastIP = {};
+	std::weak_ptr<Connection> connection;
 	BedItem* bedItem = nullptr;
 	Guild_ptr guild = nullptr;
 	GuildRank_ptr guildRank = nullptr;
@@ -1332,7 +1328,6 @@ private:
 	friend class Map;
 	friend class Actions;
 	friend class IOLoginData;
-	friend class ProtocolGame;
 };
 
 #endif // FS_PLAYER_H
