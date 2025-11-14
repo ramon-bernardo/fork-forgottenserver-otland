@@ -10,6 +10,7 @@ public:
 	OutgoingBuffer() = default;
 
 	auto len() const { return length; }
+	auto body() { return &buffer[start]; }
 
 	void append(std::span<uint8_t> span)
 	{

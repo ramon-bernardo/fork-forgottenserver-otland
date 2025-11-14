@@ -59,6 +59,7 @@ private:
 
 	std::recursive_mutex mtx;
 	beast::tcp_stream stream;
+	asio::ip::address address;
 
 	IncomingMessage msg;
 

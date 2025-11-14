@@ -13,6 +13,8 @@
 #include <fmt/core.h>
 #include <random>
 
+using namespace std::chrono_literals;
+
 extern Game g_game;
 extern Scheduler g_scheduler;
 
@@ -69,11 +71,15 @@ bool XTEA_decrypt(IncomingMessage& msg, const xtea::round_keys& key)
 
 } // namespace
 
-using namespace std::chrono_literals;
-
 namespace tfs::game_server {
 
-Connection::Connection(asio::ip::tcp::socket&& socket) : stream{std::move(socket)} {}
+Connection::Connection(asio::ip::tcp::socket&& socket) : stream{std::move(socket)}
+{
+	beast::error_code ec;
+	if (const auto endpoint = socket.remote_endpoint(); !ec) {
+		address = endpoint.address();
+	}
+}
 
 Connection::~Connection() { shutdown(); }
 
@@ -604,6 +610,26 @@ void Connection::flush()
 	assert(!buffers.empty());
 
 	auto buffer = buffers.front();
+
+	if (checksumMode == CHECKSUM_SEQUENCE) {
+		uint32_t compressionChecksum = 0;
+		if (msg->getLength() >= 128 && deflateMessage(*msg)) {
+			compressionChecksum = 0x80000000;
+		}
+		msg->setSequenceId(compressionChecksum | getNextSequenceId());
+	}
+
+	msg->add_header(info.length);
+
+	XTEA_encrypt(*msg, key);
+
+	if (mode == CHECKSUM_ADLER) {
+		add_header(adlerChecksum(&buffer[outputBufferStart], info.length));
+	} else if (mode == CHECKSUM_SEQUENCE) {
+		add_header(getSequenceId());
+	}
+
+	msg->add_header(info.length);
 
 	stream.expires_after(30s);
 
